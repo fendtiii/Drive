@@ -9,10 +9,16 @@ using Drive.Properties;
 
 namespace Drive
 {
+
     public partial class FormGPS
+
     {
         public static string portNameGPS = "COM GPS";
         public static int baudRateGPS = 4800;
+
+        public static string portNameHEADING = "COM Heading";
+        public static int baudRateHEADING = 4800;
+
 
         public static string portNameMachine = "COM Sect";
         public static int baudRateMachine = 38400;
@@ -24,10 +30,34 @@ namespace Drive
 
         //used to decide to autoconnect section arduino this run
         public bool wasRateMachineConnectedLastRun = false;
-        public string recvSentenceSettings = "InitalSetting", lastRecvd = "";
+        public string recvSentenceSettings = "InitalSetting", lastRecvd = "", HEADINGrecvSentenceSettings = "InitalSetting";
 
         public byte checksumSent = 0;
         public byte checksumRecd = 0;
+
+        int iubx;
+        bool isrelposned;
+        bool ispvt;
+        byte[] ackPacket = new byte[] { 0xB5, 0x62, 0x01, 0x3C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        // byte[] relposned = new byte[72];
+        byte[] ubxdata = new byte[200];
+
+        //Kalman for roll
+
+        private double rollK, Pc, G, Xp, Zp, XeRoll;
+        private double P = 1.0;
+        private readonly double varRoll = 0.1; // variance, smaller, more faster filtering
+        private readonly double varProcess = 0.0003;
+
+        //heading filter
+        private static int COMPASS_VALUES = 4;  // gibt an wie viele werte gefiltert werden sollen 8 = 1 sekunde
+
+        private int[] compass = new int[] {0,0,0,0,0,0,0,0,0,0};
+        private int d;
+        private int d_sum;
+        private int kurs;
+        private double heading;
+
 
         //used to decide to autoconnect autosteer arduino this run
         public bool wasAutoSteerConnectedLastRun = false;
@@ -35,18 +65,24 @@ namespace Drive
         //serial port gps is connected to
         public SerialPort spGPS = new SerialPort(portNameGPS, baudRateGPS, Parity.None, 8, StopBits.One);
 
+        //serial port heading is connected to
+        public SerialPort spHEADING = new SerialPort(portNameHEADING, baudRateHEADING, Parity.None, 8, StopBits.One);
+
         //serial port Arduino is connected to
         public SerialPort spMachine = new SerialPort(portNameMachine, baudRateMachine, Parity.None, 8, StopBits.One);
 
         //serial port AutoSteer is connected to
         public SerialPort spAutoSteer = new SerialPort(portNameAutoSteer, baudRateAutoSteer, Parity.None, 8, StopBits.One);
 
+
+
+
         #region AutoSteerPort // --------------------------------------------------------------------
         private void SerialLineReceivedAutoSteer(string sentence)
         {
             //spit it out no matter what it says
             mc.serialRecvAutoSteerStr = sentence;
-            if (pbarSteer++ > 98) pbarSteer=0;
+            if (pbarSteer++ > 98) pbarSteer = 0;
 
             // Find end of sentence and a comma, if not a CR, return
             int end = sentence.IndexOf("\r");
@@ -92,7 +128,7 @@ namespace Drive
                         break;
 
                     // 127,230, 2=checksum, 8 = ino version
-                    case 230: 
+                    case 230:
 
                         byte.TryParse(words[2], out checksumRecd);
 
@@ -359,7 +395,7 @@ namespace Drive
 
             //speed
             mc.machineData[mc.mdSpeedXFour] = unchecked((byte)(pn.speed * 4));
-            
+
             //Tell Arduino to turn section on or off accordingly
             if (spMachine.IsOpen)
             {
@@ -461,7 +497,7 @@ namespace Drive
                 {
                     //System.Threading.Thread.Sleep(25);
                     string sentence = spMachine.ReadLine();
-                    this.BeginInvoke(new LineReceivedEventHandlerMachine(SerialLineReceivedMachine), sentence);                    
+                    this.BeginInvoke(new LineReceivedEventHandlerMachine(SerialLineReceivedMachine), sentence);
                     if (spMachine.BytesToRead > 32) spMachine.DiscardInBuffer();
                 }
                 //this is bad programming, it just ignores errors until its hooked up again.
@@ -499,9 +535,6 @@ namespace Drive
 
             if (spMachine.IsOpen)
             {
-                //short delay for the use of mega2560, it is working in debugmode with breakpoint
-                System.Threading.Thread.Sleep(1000); // 500 was not enough
-
                 spMachine.DiscardOutBuffer();
                 spMachine.DiscardInBuffer();
 
@@ -543,7 +576,7 @@ namespace Drive
             {
                 pn.logNMEASentence.Append(sentence);
             }
-            
+
             //recvSentenceSettings = sbNMEAFromGPS.ToString();
         }
 
@@ -649,6 +682,394 @@ namespace Drive
         }
 
         #endregion SerialPortGPS
+
+        #region HEADING SerialPort //--------------------------------------------------------------------------
+
+
+
+        private void ubxparsen(byte ubx)
+        {
+            //if (ubx == '$') //nmea found
+            //{
+            //    Console.WriteLine("Nmea found! ");
+            //    iubx = 0;
+            //    isrelposned = false;
+            //    ispvt = false;
+            //    return;
+            //}
+
+            if (iubx < 3 && ubx == ackPacket[iubx])  //check for messages
+            {
+                //  Console.WriteLine("Header gefunden : " + iubx);
+                ubxdata[iubx] = ubx;
+                iubx++;
+                return;
+            }
+
+            if (iubx == 3 && ubx == 0x3C)  //found relposned
+            {
+                ubxdata[iubx] = ubx;
+                iubx++;
+                isrelposned = true;
+                // Console.WriteLine("Relposned Header found : ");
+                return;
+            }
+
+            if (iubx == 3 && ubx == 0x07) //found pvt
+            {
+                ubxdata[iubx] = ubx;
+                iubx++;
+                // Console.WriteLine("PVT Header found : ");
+                ispvt = true;
+                return;
+            }
+
+
+
+            if (iubx == 3)//  && !ispvt || !isrelposned) //remove all other messages
+            {
+                iubx = 0;
+                //Console.WriteLine("falscher Header ");
+                isrelposned = false;
+                ispvt = false;
+
+                return;
+            }
+
+            if (iubx > 3)
+            {
+                ubxdata[iubx] = ubx;
+                iubx++;
+            }
+
+            if (iubx == 72 && isrelposned) //relposned found
+
+            {
+                iubx = 0;
+                isrelposned = false;
+                ispvt = false;
+                // Console.WriteLine("parsing RELPOSNED");
+                int CK_A = 0;
+                int CK_B = 0;
+                for (int j = 2; j < 70; j += 1)// start with Class and end by Checksum
+                {
+                    CK_A = (CK_A + ubxdata[j]) & 0xFF;
+                    CK_B = (CK_B + CK_A) & 0xFF;
+                }
+
+                if (ubxdata[70] == CK_A && ubxdata[71] == CK_B)
+                {
+                    // Console.WriteLine("Parsing relposned data");
+
+                    int flags = ubxdata[60 + 6];
+                    int carrSoln = (flags & (0b11 << 3)) >> 3;
+
+                    
+                    if (carrSoln == 2) HEADINGrecvSentenceSettings = " Heading RTK Fixed ";
+                    if (carrSoln == 1) HEADINGrecvSentenceSettings = " Heading FLOAT ";
+                    if (carrSoln == 0) HEADINGrecvSentenceSettings = " No Heading ";
+
+
+
+                    float relposlength = ubxdata[26] | (ubxdata[27] << 8) | (ubxdata[28] << 16) | (ubxdata[29] << 24);//in cm!
+                    relposlength /= 100;
+
+                    
+                    HEADINGrecvSentenceSettings += "  Baseline: " + relposlength;
+
+                    double relPosD = ((ubxdata[22] | (ubxdata[23] << 8) | (ubxdata[24] << 16) | (ubxdata[25] << 24))*0.01 + ubxdata[40] / 10000);
+
+                    //relPosD /= 100;
+
+                    HEADINGrecvSentenceSettings += "  Neigung m: " + relPosD;
+
+                    double p = Math.Sqrt(relposlength * relposlength - relPosD * relPosD);
+
+                    //added by Andreas Ortner
+                    rollK = (float)(Math.Atan2((relPosD / p), relposlength) * 180 / 3.141592653589793238);
+                    rollK *= -1;
+
+                    double antennenabstand = Properties.Settings.Default.setbaseline;
+                    double maxfehler = 0.10;
+
+                   
+
+                    if (carrSoln!=2 || relposlength > antennenabstand+maxfehler || relposlength< antennenabstand-maxfehler)
+                    {
+                        HEADINGrecvSentenceSettings += "  Abstandfehler: ";
+                        HEADINGrecvSentenceSettings += (int)((relposlength - antennenabstand)*100);
+                        HEADINGrecvSentenceSettings += " cm";
+                        rollK = 0;
+
+                    }
+
+
+                    //Kalman filter
+                    Pc = P + varProcess;
+                    G = Pc / (Pc + varRoll);
+                    P = (1 - G) * Pc;
+                    Xp = XeRoll;
+                    Zp = Xp;
+                    XeRoll = (G * (rollK - Zp)) + Xp;
+
+                    ahrs.rollX16 = (int)(XeRoll * 16);
+
+
+
+                    HEADINGrecvSentenceSettings += "  Roll: " + XeRoll.ToString("0.00") ; 
+
+
+                    heading = ((ubxdata[30] | (ubxdata[31] << 8) | (ubxdata[32] << 16) | (ubxdata[33] << 24)) * 0.00001);
+
+                    heading = heading + Properties.Settings.Default.setheadingmove;  //adds 90 deg
+                    if (heading >= 360) heading -= 360;
+                    if (heading < 0) heading += 360;
+
+                    if (heading > 0)
+                    {
+
+                        for (int i = COMPASS_VALUES; i >= 1; i--)
+                        {
+                            compass[i] = compass[i - 1];
+                           
+                        }
+
+                        heading *= 100;
+
+                        compass[0] = (int)heading;
+                    }
+                    else
+                    {
+                        HEADINGrecvSentenceSettings += "  Kein Heading ";
+                    }
+
+                    // calculate average course derivation
+                    kurs = compass[0];
+
+                    
+
+                    
+                    d_sum = 0;
+                    for (int i = 1; i < COMPASS_VALUES; i++)
+                    {
+                        d = compass[i] - kurs;
+                        if (d > 18000) d -= 36000;
+                        if (d < -18000) d += 36000;
+                        d_sum += d;
+                        
+                    }
+
+                    d_sum += COMPASS_VALUES / 2;  // round (add 0.5)
+                    d_sum /= (COMPASS_VALUES);
+                    kurs += d_sum;
+
+                    // normalize
+                    if (kurs >= 36000) kurs -= 36000;
+                    if (kurs < 0) kurs += 36000;
+
+                   
+                    heading = kurs;
+                    heading /= 100;
+
+                    pn.headingHDT = heading;
+
+
+                    
+
+                    HEADINGrecvSentenceSettings += " Heading: " + heading;
+
+                   
+
+
+                }
+                // else Console.WriteLine("Checksum Fail");
+
+
+            }
+            if (iubx == 100 && ispvt) //pvt
+
+            {
+                iubx = 0;
+                ispvt = false;
+                isrelposned = false;
+
+                int CK_A = 0;
+                int CK_B = 0;
+
+                for (int j = 2; j < 98; j += 1)// start with Class and end by Checksum
+                {
+                    CK_A = (CK_A + ubxdata[j]) & 0xFF;
+                    CK_B = (CK_B + CK_A) & 0xFF;
+                }
+
+                if (ubxdata[98] == CK_A && ubxdata[99] == CK_B)
+                {
+                   // Console.WriteLine("parsing pvt");
+                  //  long itow = ubxdata[6] | (ubxdata[7] << 8) | (ubxdata[8] << 16) | (ubxdata[9] << 24);
+
+                    if ((ubxdata[27] & 0x81) == 0x81)
+                    {
+                        //pn.FixQuality = 4;
+                        //  pn.EnableHeadRoll = true;
+                    }
+                    else if ((ubxdata[27] & 0x41) == 0x41)
+                    {
+                        // pn.FixQuality = 5;
+                        // pn.EnableHeadRoll = true;
+                    }
+                    else
+                    {
+                        // pn.FixQuality = 1;
+                        //pn.EnableHeadRoll = false;
+                    }
+
+                  //  pn.satellitesTracked = ubxdata[29];
+
+                   // pn.longitude = (ubxdata[30] | (ubxdata[31] << 8) | (ubxdata[32] << 16) | (ubxdata[33] << 24)) * 0.0000001;//to deg
+                  //  pn.latitude = (ubxdata[34] | (ubxdata[35] << 8) | (ubxdata[36] << 16) | (ubxdata[37] << 24)) * 0.0000001;//to deg
+                  //  pn.altitude = (ubxdata[42] | (ubxdata[43] << 8) | (ubxdata[44] << 16) | (ubxdata[45] << 24)) * 0.001;//to meters
+
+                  //  pn.hdop = (ubxdata[46] | (ubxdata[47] << 8) | (ubxdata[48] << 16) | (ubxdata[49] << 24)) * 0.01;
+
+                    if (pn.longitude != 0)
+                    {
+                        // pn.ToUTM_FixConvergenceAngle();
+
+                        //  pn.speed = (ubxdata[66] | (ubxdata[67] << 8) | (ubxdata[68] << 16) | (ubxdata[69] << 24)) * 0.0036;//to km/h
+
+                        //average the speed
+                        // pn.AverageTheSpeed();
+
+                        // recvSentenceSettings[2] = recvSentenceSettings[0];
+                        //  recvSentenceSettings[0] = "$UBX-PVT, Longitude = " + pn.longitude.ToString("N7", CultureInfo.InvariantCulture) + ", Latitude = " + pn.latitude.ToString("N7", CultureInfo.InvariantCulture) + ", Altitude = " + pn.altitude.ToString("N3", CultureInfo.InvariantCulture) + ", itow = " + itow.ToString();
+                    }
+                    else
+                    {
+                        // pn.EnableHeadRoll = false;
+                        // pn.FixQuality = 0;
+                        //  recvSentenceSettings[2] = recvSentenceSettings[0];
+                        // recvSentenceSettings[0] = "$UBX-PVT, Longitude = ???, Latitude = ???, Altitude = ???, itow = " + itow.ToString();
+                    }
+
+                }
+            }
+
+        }
+
+        //called by the GPS delegate every time a chunk is rec'd
+        private void HEADINGSerialLineReceived(byte[] Data)
+
+        {
+            int count = 0;
+            do
+            {
+                ubxparsen(Data[count]);
+                count++;
+            } while (count < Data.Length);
+
+        }
+
+
+        private delegate void HeadingLineReceivedEventHandler(byte[] Data);
+
+        //serial port receive in its own thread
+        private void HEADINGsp_DataReceived(object sender, System.IO.Ports.SerialDataReceivedEventArgs e)
+        {
+            if (spHEADING.IsOpen)
+            {
+                try
+                {
+                    int bytes = spHEADING.BytesToRead;
+                    byte[] Data = new byte[bytes];
+                    spHEADING.Read(Data, 0, bytes);
+                    if (bytes > 0) this.BeginInvoke(new HeadingLineReceivedEventHandler(HEADINGSerialLineReceived), Data);
+                }
+                catch (Exception ex)
+                {
+                    WriteErrorLog("GPS Data Recv" + ex.ToString());
+                    //MessageBox.Show(ex.Message + "\n\r" + "\n\r" + "Go to Settings -> COM Ports to Fix", "ComPort Failure!");
+                }
+            }
+        }
+
+        public void HEADINGSerialPortOpenGPS()
+        {
+            //close it first
+            HEADINGSerialPortCloseGPS();
+
+            if (spHEADING.IsOpen)
+            {
+                simulatorOnToolStripMenuItem.Checked = false;
+                panelSim.Visible = false;
+                timerSim.Enabled = false;
+
+                Settings.Default.setMenu_isSimulatorOn = simulatorOnToolStripMenuItem.Checked;
+                Settings.Default.Save();
+            }
+
+
+            if (!spHEADING.IsOpen)
+            {
+                spHEADING.PortName = portNameHEADING;
+                spHEADING.BaudRate = baudRateHEADING;
+                spHEADING.DataReceived += HEADINGsp_DataReceived;
+                spHEADING.WriteTimeout = 1000;
+            }
+
+            try { spHEADING.Open(); }
+            catch (Exception)
+            {
+                //MessageBox.Show(exc.Message + "\n\r" + "\n\r" + "Go to Settings -> COM Ports to Fix", "No Serial Port Active");
+                //WriteErrorLog("Open GPS Port " + e.ToString());
+
+                //update port status labels
+                //stripPortGPS.Text = " * * ";
+                //stripPortGPS.ForeColor = Color.Red;
+                //stripOnlineGPS.Value = 1;
+
+                //SettingsPageOpen(0);
+            }
+
+            if (spHEADING.IsOpen)
+            {
+                //btnOpenSerial.Enabled = false;
+
+                //discard any stuff in the buffers
+                spHEADING.DiscardOutBuffer();
+                spHEADING.DiscardInBuffer();
+
+                //update port status label
+                //stripPortGPS.Text = portnameHEADING + " " + baudRateGPSHEADING.ToString();
+                //stripPortGPS.ForeColor = Color.ForestGreen;
+
+                Properties.Settings.Default.setPort_portNameHEADING = portNameHEADING;
+                Properties.Settings.Default.setPort_baudRate = baudRateHEADING;
+                Properties.Settings.Default.Save();
+            }
+        }
+
+        public void HEADINGSerialPortCloseGPS()
+        {
+            //if (sp.IsOpen)
+            {
+                spHEADING.DataReceived -= HEADINGsp_DataReceived;
+                try { spHEADING.Close(); }
+                catch (Exception e)
+                {
+                    WriteErrorLog("Closing GPS Port" + e.ToString());
+                    MessageBox.Show(e.Message, "Connection already terminated?");
+                }
+
+                //update port status labels
+                //stripPortGPS.Text = " * * " + baudRateGPSHEADING.ToString();
+                //stripPortGPS.ForeColor = Color.ForestGreen;
+                //stripOnlineGPS.Value = 1;
+                spHEADING.Dispose();
+            }
+        }
+
+        #endregion Heading SerialPortGPS
+
 
     }//end class
 }//end namespace

@@ -4,6 +4,7 @@ using System.Windows.Forms;
 
 namespace Drive
 {
+
     public partial class FormCommSet : Form
     {
         //class variables
@@ -36,6 +37,9 @@ namespace Drive
             lblCurrentPort.Text = gStr.gsPort;
             lblCurrentAutoSteerPort.Text = gStr.gsPort;
             lblCurrentBaud.Text = gStr.gsBaud;
+            headingadj.Value = (decimal)Properties.Settings.Default.setheadingmove;
+            baselineadj.Value = (decimal)Properties.Settings.Default.setbaseline;
+
 
         }
 
@@ -56,6 +60,23 @@ namespace Drive
                 btnCloseSerial.Enabled = false;
                 btnOpenSerial.Enabled = true;
             }
+            //check if Heading port is open or closed an set buttons accordingly
+            if(mf.spHEADING.IsOpen)
+            {
+                cboxbautheading.Enabled = false;
+                cboxportheading.Enabled = false;
+                btnCloseHEADING.Enabled = true;
+                btnOpenHEADING.Enabled = false;
+
+            }
+            else
+            {
+                cboxbautheading.Enabled = true;
+                cboxportheading.Enabled = true;
+                btnCloseHEADING.Enabled = false;
+                btnOpenHEADING.Enabled = true;
+            }
+
 
             //check if Arduino port is open or closed and set buttons accordingly
             if (mf.spMachine.IsOpen)
@@ -89,17 +110,25 @@ namespace Drive
             cboxPort.Items.Clear();
             cboxArdPort.Items.Clear();
             cboxASPort.Items.Clear();
+            cboxportheading.Items.Clear();
+
             foreach (String s in System.IO.Ports.SerialPort.GetPortNames())
             {
                 cboxPort.Items.Add(s);
                 cboxArdPort.Items.Add(s);
                 cboxASPort.Items.Add(s);
+                cboxportheading.Items.Add(s);
             }
 
             lblCurrentBaud.Text = mf.spGPS.BaudRate.ToString();
             lblCurrentPort.Text = mf.spGPS.PortName;
             lblCurrentArduinoPort.Text = mf.spMachine.PortName;
             lblCurrentAutoSteerPort.Text = mf.spAutoSteer.PortName;
+            lblCurrentHeadingPort.Text = mf.spHEADING.PortName;
+            lblCurrentHeadingBaud.Text = mf.spHEADING.BaudRate.ToString();
+
+
+
         }
 
         #region PortSettings //----------------------------------------------------------------
@@ -261,6 +290,11 @@ namespace Drive
 
             cboxPort.Items.Clear();
             foreach (String s in System.IO.Ports.SerialPort.GetPortNames()) { cboxPort.Items.Add(s); }
+
+            cboxportheading.Items.Clear();
+            foreach (String s in System.IO.Ports.SerialPort.GetPortNames()) { cboxportheading.Items.Add(s); }
+
+
         }
 
         #endregion PortSettings //----------------------------------------------------------------
@@ -269,6 +303,7 @@ namespace Drive
         {
             //GPS phrase
             textBoxRcv.Text = mf.recvSentenceSettings;
+           textBoxRcvHeading.Text = mf.HEADINGrecvSentenceSettings;
             //mf.recvSentenceSettings = "";
 
             //RateMachine phrases
@@ -285,8 +320,93 @@ namespace Drive
         private void btnSerialOK_Click(object sender, EventArgs e)
         {
             //save
+            Properties.Settings.Default.setbaseline = (float)baselineadj.Value;
+            Properties.Settings.Default.setheadingmove = (float)headingadj.Value;
+            Properties.Settings.Default.Save();
             DialogResult = DialogResult.OK;
             Close();
+        }
+
+        private void groupBox4_Enter(object sender, EventArgs e)
+        {
+
+        }
+
+        private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
+        {
+
+            mf.spHEADING.PortName = cboxportheading.Text;
+            FormGPS.portNameHEADING = cboxportheading.Text;
+        }
+
+        private void comboBox2_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            mf.spHEADING.BaudRate = Convert.ToInt32(cboxbautheading.Text);
+            FormGPS.baudRateHEADING = Convert.ToInt32(cboxbautheading.Text);
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+
+            mf.HEADINGSerialPortOpenGPS();
+            if (mf.spHEADING.IsOpen)
+            {
+                cboxbautheading.Enabled = false;
+                cboxportheading.Enabled = false;
+                btnCloseHEADING.Enabled = true;
+                btnOpenHEADING.Enabled = false;
+                lblCurrentBaud.Text = mf.spHEADING.BaudRate.ToString();
+                lblCurrentPort.Text = mf.spHEADING.PortName;
+            }
+            else
+            {
+                cboxbautheading.Enabled = true;
+                cboxportheading.Enabled = true;
+                btnCloseHEADING.Enabled = false;
+                btnOpenHEADING.Enabled = true;
+            }
+
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            mf.HEADINGSerialPortCloseGPS();
+            if (mf.spHEADING.IsOpen)
+            {
+                cboxbautheading.Enabled = false;
+                cboxportheading.Enabled = false;
+                btnCloseHEADING.Enabled = true;
+                btnOpenHEADING.Enabled = false;
+            }
+            else
+            {
+                cboxbautheading.Enabled = true;
+                cboxportheading.Enabled = true;
+                btnCloseHEADING.Enabled = false;
+                btnOpenHEADING.Enabled = true;
+            }
+        }
+
+        private void baselineadj_ValueChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void baselineadj_Enter(object sender, EventArgs e)
+        {
+            mf.KeypadToNUD((NumericUpDown)sender);
+            Properties.Settings.Default.setbaseline = (float)baselineadj.Value;
+            Properties.Settings.Default.setheadingmove = (float)headingadj.Value;
+            Properties.Settings.Default.Save();
+
+        }
+
+        private void headingadj_Enter(object sender, EventArgs e)
+        {
+            mf.KeypadToNUD((NumericUpDown)sender);
+            Properties.Settings.Default.setbaseline = (float)baselineadj.Value;
+            Properties.Settings.Default.setheadingmove = (float)headingadj.Value;
+            Properties.Settings.Default.Save();
         }
     } //class
 } //namespace

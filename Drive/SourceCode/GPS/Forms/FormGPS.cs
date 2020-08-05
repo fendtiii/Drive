@@ -438,7 +438,8 @@ namespace Drive
             //set baud and port from last time run
             baudRateGPS = Settings.Default.setPort_baudRate;
             portNameGPS = Settings.Default.setPort_portNameGPS;
-
+            portNameHEADING=Settings.Default.setPort_portNameHEADING;
+          
             //try and open
             SerialPortOpenGPS();
 

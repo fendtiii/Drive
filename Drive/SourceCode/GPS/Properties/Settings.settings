@@ -323,5 +323,14 @@
     <Setting Name="setMenu_isLogHeading" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
     </Setting>
+    <Setting Name="setPort_portNameHEADING" Type="System.String" Scope="User">
+      <Value Profile="(Default)">COM Heading</Value>
+    </Setting>
+    <Setting Name="setbaseline" Type="System.Single" Scope="User">
+      <Value Profile="(Default)">1.64</Value>
+    </Setting>
+    <Setting Name="setheadingmove" Type="System.Single" Scope="User">
+      <Value Profile="(Default)">90</Value>
+    </Setting>
   </Settings>
 </SettingsFile>
