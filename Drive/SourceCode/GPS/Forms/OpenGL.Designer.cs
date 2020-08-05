@@ -1884,7 +1884,7 @@ namespace Drive
 
                 GL.Enable(EnableCap.Texture2D);
 
-                double u = (fixHeading)/glm.twoPI;
+                double u = camera.camFloat/glm.twoPI;
                 GL.Begin(PrimitiveType.TriangleStrip);              // Build Quad From A Triangle Strip
                 GL.TexCoord2(u+0.25,      0); GL.Vertex2(winRightPos, 0.0); // Top Right
                 GL.TexCoord2(u, 0); GL.Vertex2(winLeftPos, 0.0); // Top Left

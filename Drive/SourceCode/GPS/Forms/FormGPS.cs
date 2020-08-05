@@ -121,7 +121,7 @@ namespace Drive
         /// <summary>
         /// create the scene camera
         /// </summary>
-        public CCamera camera = new CCamera();
+        public CCamera camera;
 
         /// <summary>
         /// create world grid
@@ -285,6 +285,8 @@ namespace Drive
 
             //build the gesture structures
             SetupStructSizes();
+
+            camera = new CCamera(this);
 
             //create the world grid
             worldGrid = new CWorldGrid(this);
@@ -1038,6 +1040,14 @@ namespace Drive
             isSimNoisy = !isSimNoisy;
             if (!isSimNoisy) btnNoise.BackColor = Color.LightSalmon;
             else btnNoise.BackColor = Color.LightGreen;
+        }
+
+        private void reverseToolStripBtn_Click(object sender, EventArgs e)
+        {
+            isReverse = !isReverse;
+            lastValidHeading += Math.PI;
+            if (lastValidHeading < 0) lastValidHeading += glm.twoPI;
+            if (lastValidHeading > glm.twoPI) lastValidHeading -= glm.twoPI;
         }
 
         private void stripSectionColor_Click(object sender, EventArgs e)

@@ -488,12 +488,12 @@
             this.nudMinFixStepDistance.InterceptArrowKeys = false;
             this.nudMinFixStepDistance.Location = new System.Drawing.Point(22, 47);
             this.nudMinFixStepDistance.Maximum = new decimal(new int[] {
-            40,
+            1,
             0,
             0,
-            65536});
+            0});
             this.nudMinFixStepDistance.Minimum = new decimal(new int[] {
-            10,
+            2,
             0,
             0,
             65536});

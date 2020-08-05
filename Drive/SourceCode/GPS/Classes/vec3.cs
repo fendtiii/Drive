@@ -121,6 +121,22 @@ namespace Drive
         }
     }
 
+    public struct vHeading
+    {
+        public double easting; //easting
+        public double distance; //heading etc
+        public double northing; //northing
+        public int isSet;    //altitude
+
+        public vHeading(double _easting, double _northing, double _distance, int _isSet)
+        {
+            this.easting = _easting;
+            this.distance = _distance;
+            this.northing = _northing;
+            this.isSet = _isSet;
+        }
+    }
+
     public struct vec2
     {
         public double easting; //easting

@@ -73,8 +73,8 @@ namespace Drive
 
             if (mf.isSimNoisy)
             {
-                double noiseLat = (double)(RandomNumber(0, 6)) / 50000000;
-                double noiseLon = (double)(RandomNumber(0, 6)) / 50000000;
+                double noiseLat = (double)(RandomNumber(0, 7)) / 50000000;
+                double noiseLon = (double)(RandomNumber(0, 7)) / 50000000;
                 latitude += noiseLat;
                 longitude += noiseLon;
             }

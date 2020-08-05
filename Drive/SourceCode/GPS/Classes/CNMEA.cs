@@ -291,6 +291,9 @@ Field	Meaning
             //        Time      Lat       Lon
 
             //is the sentence GGA
+
+            if (words.Length < 12) return;
+
             if (!String.IsNullOrEmpty(words[2]) && !String.IsNullOrEmpty(words[3])
                 && !String.IsNullOrEmpty(words[4]) && !String.IsNullOrEmpty(words[5]))
             {
@@ -350,6 +353,8 @@ Field	Meaning
         {
             //$GPVTG,054.7,T,034.4,M,005.5,N,010.2,K*48
             //is the sentence GGA
+            if (words.Length < 6) return;
+
             if (!String.IsNullOrEmpty(words[1]) && !String.IsNullOrEmpty(words[5]))
             {
                 //kph for speed - knots read
@@ -363,10 +368,17 @@ Field	Meaning
             {
                 speed = 0;
             }
+
+            if (mf.isReverse)
+            {
+                speed *= -1.0;
+            }
         }
 
         private void ParseAVR()
         {
+            if (words.Length < 8) return;
+
             if (!String.IsNullOrEmpty(words[1]))
             {
                 if (words[8] == "Roll")
@@ -428,6 +440,9 @@ Field	Meaning
             3   The checksum data, always begins with *
                 */
 
+            if (words.Length < 3) return;
+
+
             if (!String.IsNullOrEmpty(words[1]))
             {
                 //Dual heading
@@ -439,6 +454,8 @@ Field	Meaning
         {
             //PAOGI parsing of the sentence
             //make sure there aren't missing coords in sentence
+            if (words.Length < 16) return;
+
             if (!String.IsNullOrEmpty(words[2]) && !String.IsNullOrEmpty(words[3])
                 && !String.IsNullOrEmpty(words[4]) && !String.IsNullOrEmpty(words[5]))
             {
@@ -693,7 +710,7 @@ Field	Meaning
         private void AverageTheSpeed()
         {
             //average the speed
-            mf.avgSpeed = (mf.avgSpeed * 0.65) + (speed * 0.35);
+            mf.avgSpeed = (mf.avgSpeed * 0.75) + (speed * 0.25);
         }
 
         public void ToUTM_FixConvergenceAngle()

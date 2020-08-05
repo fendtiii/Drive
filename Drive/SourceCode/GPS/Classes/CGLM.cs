@@ -228,6 +228,14 @@ namespace Drive
                 + Math.Pow(first.northing - north, 2));
         }
 
+        public static double Distance(vHeading first, vec2 second)
+        {
+            return Math.Sqrt(
+                Math.Pow(first.easting - second.easting, 2)
+                + Math.Pow(first.northing - second.northing, 2));
+        }
+
+
         //not normalized distance, no square root
         public static double DistanceSquared(double northing1, double easting1, double northing2, double easting2)
         {
